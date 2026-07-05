@@ -3,22 +3,19 @@ import cors from 'cors'
 
 const app = express()
 app.use(cors({
-  origin: ['http://localhost:5173', 'https://arcanumai-ct.web.app', 'https://arcanumai-ct.firebaseapp.com'],
+  origin: ['http://localhost:5173', 'https://arcanumai-ct.web.app', 'https://arcanumai-ct.firebaseapp.com', 'https://anybody-embezzle-epiphany.ngrok-free.dev'],
   methods: ['GET', 'POST'],
 }))
 app.use(express.json())
 
-// Configuration - Change OLLAMA_HOST to the IP of the PC running Ollama
 const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434'
 
-// Model mapping: Arcanum model names -> Ollama model names
 const MODEL_MAP = {
   'arcanum-5.0': process.env.MODEL_5 || 'llama3.1',
   'arcanum-4.0': process.env.MODEL_4 || 'llama3',
   'arcanum-coder': process.env.MODEL_CODER || 'deepseek-coder',
 }
 
-// System prompt that makes the AI identify as ArcanumAI
 function getSystemPrompt(model, userProfile) {
   const modelName = model === 'arcanum-coder' ? 'Arcanum Coder' :
     model === 'arcanum-5.0' ? 'Arcanum 5.0' : 'Arcanum 4.0'
@@ -45,7 +42,6 @@ Responde siempre de forma útil, precisa y amable.`
   return prompt
 }
 
-// Chat endpoint
 app.post('/api/chat', async (req, res) => {
   try {
     const { messages, model, reasoningLevel, userProfile } = req.body
@@ -53,13 +49,11 @@ app.post('/api/chat', async (req, res) => {
     const ollamaModel = MODEL_MAP[model] || MODEL_MAP['arcanum-5.0']
     const systemPrompt = getSystemPrompt(model, userProfile)
 
-    // Build messages array with system prompt
     const ollamaMessages = [
       { role: 'system', content: systemPrompt },
       ...messages,
     ]
 
-    // Adjust temperature based on reasoning level (1-5)
     const temperature = reasoningLevel ? Math.max(0.1, 1.0 - (reasoningLevel * 0.15)) : 0.7
 
     const response = await fetch(`${OLLAMA_HOST}/api/chat`, {
@@ -78,9 +72,9 @@ app.post('/api/chat', async (req, res) => {
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error('Ollama error:', response.status, errorText)
-      return res.status(500).json({
-        message: `Error al conectar con el modelo. Verifica que Ollama esté corriendo y el modelo "${ollamaModel}" esté descargado.`,
+      console.error('Model error:', response.status, errorText)
+      return res.status(503).json({
+        message: 'El servicio de IA no está disponible en este momento. Inténtalo de nuevo más tarde.',
       })
     }
 
@@ -93,29 +87,27 @@ app.post('/api/chat', async (req, res) => {
     })
   } catch (error) {
     console.error('Server error:', error.message)
-    res.status(500).json({
-      message: `Error de conexión con Ollama (${OLLAMA_HOST}). Verifica que el servidor esté accesible.`,
+    res.status(503).json({
+      message: 'No se pudo conectar con el servicio de IA. Inténtalo de nuevo más tarde.',
     })
   }
 })
 
-// Health check
 app.get('/api/health', async (req, res) => {
   try {
     const response = await fetch(`${OLLAMA_HOST}/api/tags`)
     if (response.ok) {
       const data = await response.json()
       const models = data.models?.map((m) => m.name) || []
-      res.json({ status: 'ok', ollamaHost: OLLAMA_HOST, availableModels: models })
+      res.json({ status: 'ok', availableModels: models })
     } else {
-      res.json({ status: 'error', message: 'Ollama no responde' })
+      res.json({ status: 'error', message: 'Servicio no disponible' })
     }
   } catch {
-    res.json({ status: 'error', message: `No se puede conectar a ${OLLAMA_HOST}` })
+    res.json({ status: 'error', message: 'Servicio no disponible' })
   }
 })
 
-// List available models from Ollama
 app.get('/api/models', async (req, res) => {
   try {
     const response = await fetch(`${OLLAMA_HOST}/api/tags`)
@@ -134,9 +126,4 @@ const PORT = process.env.PORT || 3001
 const HOST = process.env.HOST || '0.0.0.0'
 app.listen(PORT, HOST, () => {
   console.log(`ArcanumAI Backend running on ${HOST}:${PORT}`)
-  console.log(`Ollama host: ${OLLAMA_HOST}`)
-  console.log(`Model mapping:`)
-  console.log(`  Arcanum 5.0  -> ${MODEL_MAP['arcanum-5.0']}`)
-  console.log(`  Arcanum 4.0  -> ${MODEL_MAP['arcanum-4.0']}`)
-  console.log(`  Arcanum Coder -> ${MODEL_MAP['arcanum-coder']}`)
 })
